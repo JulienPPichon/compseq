@@ -10,6 +10,7 @@ def get_args(argv = None):
 	parser.add_argument("-d", "--minimal_distance", type=int, help="Length of the minimal distance between a kmer and its reverse complementary sequence", default = 100)
 	parser.add_argument("-k", "--kmer_length", type=int, help="Length of the matching sequences", default = 10)
 	parser.add_argument("-f", "--keep_all_kmer", help="Filter out matching sequences belonging to a greater k length", action="store_false")
+	parser.add_argument('-s', "--select_sequence", nargs='*', help="Comparison only between the specified sequences")
 	return parser.parse_args(argv)
 
 
@@ -25,7 +26,7 @@ def read_fasta(input_file):
 	return seq
 
 
-def read_align(input_file):
+def read_align(input_file, select_sequences):
 	dict_seq = {}
 	with open(input_file, "r") as filin:
 		for n, line in enumerate(filin):
@@ -34,7 +35,11 @@ def read_align(input_file):
 				continue
 			else:
 				line = line.split()
-				dict_seq[line[0]] = line[1]
+				if select_sequences == None:
+					dict_seq[line[0]] = line[1]
+				else:
+					if line[0] in select_sequences:
+						dict_seq[line[0]] = line[1]
 	return dict_seq
 				
 
@@ -85,24 +90,6 @@ def find_match(dict_seq_kmer, min_distance, k, file_output, keep_all_kmer):
 			dict_interval[seq] = match
 	return dict_interval
 
-"""
-def k_filter(dict_interval, file_output, k):
-	matching_tree = IntervalTree()
-	with open(file_output, "w") as filout:
-		for seq in tqdm(dict_interval):
-			for matching_kmer in sorted(dict_interval[seq]):
-				if Interval(matching_kmer.begin + 1, matching_kmer.end - 1, matching_kmer.data[1:] + "A") not in dict_interval[seq] and Interval(matching_kmer.begin + 1, matching_kmer.end - 1, matching_kmer.data[1:] + "C") not in dict_interval[seq] and Interval(matching_kmer.begin + 1, matching_kmer.end - 1, matching_kmer.data[1:] + "G") not in dict_interval[seq] and Interval(matching_kmer.begin + 1, matching_kmer.end - 1, matching_kmer.data[1:] + "T") not in dict_interval[seq] and Interval(matching_kmer.begin - 1, matching_kmer.end + 1, "A" + matching_kmer.data[:-1]) not in dict_interval[seq] and Interval(matching_kmer.begin - 1, matching_kmer.end + 1, "C" + matching_kmer.data[:-1]) not in dict_interval[seq] and Interval(matching_kmer.begin - 1, matching_kmer.end + 1, "G" +  matching_kmer.data[:-1]) not in dict_interval[seq] and Interval(matching_kmer.begin - 1, matching_kmer.end + 1, "T" + matching_kmer.data[:-1]) not in dict_interval[seq]:
-					matching_tree[matching_kmer.begin + 1:matching_kmer.end + 1] = [seq, matching_kmer.data]
-		for interval_obj in tqdm(matching_tree):
-			count = 0
-			count_seq = 0
-			for other_obj in sorted(matching_tree[interval_obj.begin:interval_obj.end]):
-				if interval_obj.begin == other_obj.begin and interval_obj.end == other_obj.end:
-					count += 1
-					if interval_obj.data[1] == other_obj.data[1]:
-						count_seq += 1
-			filout.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(interval_obj.data[0], interval_obj.data[1], interval_obj.begin, interval_obj.end, count, count_seq, k))
-"""		
 
 def k_filter(dict_interval):
 	filtered_tree = IntervalTree()
@@ -123,37 +110,18 @@ def k_filter(dict_interval):
 						count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)][matching_kmer.data] += 1
 	return [filtered_tree, count_dict]
 					
+					
 def create_file(filtered_tree, count_dict, file_output, k):
 	with open(file_output, "w") as filout:
 		for interval_obj in sorted(filtered_tree):
-			filout.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(interval_obj.data[0], interval_obj.data[1], interval_obj.begin, interval_obj.end, count_dict[str(interval_obj.begin) + "_" + str(interval_obj.end)][interval_obj.data[1]], count_dict[str(interval_obj.begin) + "_" + str(interval_obj.end)]["total"], k))
-			
-
-
-"""
-def k_filter(dict_interval, file_output, k):
-	count_dict = {}
-	with open(file_output, "w") as filout:
-		for seq in tqdm(dict_interval):
-			for matching_kmer in sorted(dict_interval[seq]):
-				if Interval(matching_kmer.begin + 1, matching_kmer.end - 1, matching_kmer.data[1:] + "A") not in dict_interval[seq] and Interval(matching_kmer.begin + 1, matching_kmer.end - 1, matching_kmer.data[1:] + "C") not in dict_interval[seq] and Interval(matching_kmer.begin + 1, matching_kmer.end - 1, matching_kmer.data[1:] + "G") not in dict_interval[seq] and Interval(matching_kmer.begin + 1, matching_kmer.end - 1, matching_kmer.data[1:] + "T") not in dict_interval[seq] and Interval(matching_kmer.begin - 1, matching_kmer.end + 1, "A" + matching_kmer.data[:-1]) not in dict_interval[seq] and Interval(matching_kmer.begin - 1, matching_kmer.end + 1, "C" + matching_kmer.data[:-1]) not in dict_interval[seq] and Interval(matching_kmer.begin - 1, matching_kmer.end + 1, "G" +  matching_kmer.data[:-1]) not in dict_interval[seq] and Interval(matching_kmer.begin - 1, matching_kmer.end + 1, "T" + matching_kmer.data[:-1]) not in dict_interval[seq]:
-					if str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1) not in count_dict:
-						count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)] = {}
-						count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)]["total"] = 1
-						count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)][matching_kmer.data] = 1
-					else:
-						count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)]["total"] += 1
-						if matching_kmer.data not in count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)]:
-							count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)][matching_kmer.data] = 1
-						else:
-							count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)][matching_kmer.data] += 1	
-"""		
+			filout.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(interval_obj.data[0], interval_obj.data[1], interval_obj.begin, interval_obj.end, count_dict[str(interval_obj.begin) + "_" + str(interval_obj.end)]["total"], count_dict[str(interval_obj.begin) + "_" + str(interval_obj.end)][interval_obj.data[1]], k))
+	
 
 if __name__ == "__main__":
 
 	argvals = None
 	args = get_args(argvals)
-	dict_seq = read_align(args.filename)
+	dict_seq = read_align(args.filename, args.select_sequence)
 	dict_seq_kmer = create_kmer_dict(dict_seq, args.kmer_length)
 	dict_interval = find_match(dict_seq_kmer, args.minimal_distance, args.kmer_length, args.output, args.keep_all_kmer)
 	if args.keep_all_kmer is False:
