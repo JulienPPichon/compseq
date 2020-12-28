@@ -25,17 +25,17 @@ def get_args(argv = None):
 	parser.add_argument("-i", "--filename", help="Take nexus alignement file as input.")
 	parser.add_argument("-o", "--output", help="Name of the tsv output file containing the\
 	individual's name, the kmer sequence, the start position of the kmer sequence, the start\
-	position of its reverse complementary sequence", "number of individuals possessing this kmer\
+	position of its reverse complementary sequence, number of individuals possessing this kmer\
 	sequence and its reversed complementary at these positions, number of individuals possessing a\
-	kmer sequence and its reverted complementary at these positions, kmer length."
+	kmer sequence and its reverted complementary at these positions, kmer length.",
 	default = "matching_kmer.tsv")
 	parser.add_argument("-d", "--minimal_distance", type=int, help="Minimal distance between a kmer\
 	and its reverse complementary sequence.", default = 100)
 	parser.add_argument("-k", "--kmer_length", type=int, help="Complementary sequences length.",
 	default = 10)
-	parser.add_argument("-f", "--keep_all_kmer", help="Filter out complementary sequences belonging\
-	to a greater kmer length. (e. g: AGGGA TCCCT. AGGG or GGGA will not count because AGGGA have a\
-	reversed complementary sequence).", action="store_false")
+	parser.add_argument("-f", "--filter_kmer", help="Filter out complementary sequences belonging\
+	to a greater kmer length. (e. g: AGGGA TCCCT. AGGG or GGGA will not count because\
+	AGGGA have a reversed complementary sequence).", action="store_false")
 	parser.add_argument('-s', "--select_sequence", nargs='*', help="Only the specified sequences\
 	will count for the conservation.")
 	parser.add_argument('-r', "--reject_sequence", nargs='*', help="The specified sequences will\
@@ -113,12 +113,30 @@ def create_kmer_dict(dict_seq, k):
 	return dict_seq_kmer
 
 
-def find_match(dict_seq_kmer, min_distance, k, file_output, keep_all_kmer):
+def find_match(dict_seq_kmer, min_distance, k, file_output):
+	"""Create a dictionnary of intervaltree containing the kmers and their reversed complementary.
+	
+	Parameters
+	----------
+	arg1 : dict
+		Dictionnary of dictionnary of list as {individual1:{kmer1:[[start1:end1], [start2:end2]]}}
+	arg2 : int
+		Minimal distance between a kmer and its reverse complementary sequence.
+	arg3 : string
+		Name of the output file.
+		
+	Returns
+	-------
+	dict
+		Dictionnary with individuals as key and the intervaltree of its kmers as value.
+		{Individual1:([kmer_start:complementary_start = kmer], ...), ...}
+	"""
 	dict_interval = {}
 	with open(file_output, "w") as filout:
 		for seq in dict_seq_kmer:
 			match = IntervalTree()
 			for kmer in dict_seq_kmer[seq]:
+				# Convert the kmer to its reversed complementary sequence.
 				reverse = kmer[::-1]
 				comp_reverse = reverse.replace("T", "z")
 				comp_reverse = comp_reverse.replace("A", "T")
@@ -127,31 +145,49 @@ def find_match(dict_seq_kmer, min_distance, k, file_output, keep_all_kmer):
 				comp_reverse = comp_reverse.replace("C", "G")
 				comp_reverse = comp_reverse.replace("z", "C")
 				if comp_reverse in dict_seq_kmer[seq]:
-					if len(dict_seq_kmer[seq][kmer]) == 1 and len(dict_seq_kmer[seq][comp_reverse]) == 1:
-						if int(dict_seq_kmer[seq][kmer][0]) + k <= int(dict_seq_kmer[seq][comp_reverse][0]) and int(dict_seq_kmer[seq][comp_reverse][0]) - int(dict_seq_kmer[seq][kmer][0]) + k <= min_distance:
-							if keep_all_kmer is True:
-								filout.write("{}\t{}\t{}\t{}\n".format(seq, kmer, dict_seq_kmer[seq][kmer][0] + 1, dict_seq_kmer[seq][comp_reverse][0] + 1))
-							else:
-								match[dict_seq_kmer[seq][kmer][0]:dict_seq_kmer[seq][comp_reverse][0]] = kmer
+					# If only one position exists for this kmer and its reversed complementary.
+					if (len(dict_seq_kmer[seq][kmer]) == 1 and 
+					len(dict_seq_kmer[seq][comp_reverse]) == 1):
+						if (int(dict_seq_kmer[seq][kmer][0]) + k <= int(dict_seq_kmer[seq]
+						[comp_reverse][0]) and int(dict_seq_kmer[seq][comp_reverse][0]) - 
+						int(dict_seq_kmer[seq][kmer][0]) + k <= min_distance):
+							match[dict_seq_kmer[seq][kmer][0]:dict_seq_kmer[seq][comp_reverse][0]] = kmer
+					# If several positions exist for this kmer and its reversed complementary.
 					else:
 						for position in dict_seq_kmer[seq][kmer]:
 							for position_reverse in dict_seq_kmer[seq][comp_reverse]:
-								if int(position + k) <= int(position_reverse) and int(position_reverse) - int(position) + k <= min_distance:
-									if keep_all_kmer is True:
-										filout.write("{}\t{}\t{}\t{}\n".format(seq, kmer, position + 1, position_reverse + 1))
-									else:
-										match[position:position_reverse] = kmer
+								if (int(position + k) <= int(position_reverse) and
+								int(position_reverse) - int(position) + k <= min_distance):
+									match[position:position_reverse] = kmer
 			dict_interval[seq] = match
 	return dict_interval
 
 
-def k_filter(dict_interval):
+def k_filter(dict_interval, keep_all_kmer):
 	filtered_tree = IntervalTree()
 	count_dict = {}
 	for seq in tqdm(dict_interval):
 		for matching_kmer in sorted(dict_interval[seq]):
-			if Interval(matching_kmer.begin + 1, matching_kmer.end - 1, matching_kmer.data[1:] + "A") not in dict_interval[seq] and Interval(matching_kmer.begin + 1, matching_kmer.end - 1, matching_kmer.data[1:] + "C") not in dict_interval[seq] and Interval(matching_kmer.begin + 1, matching_kmer.end - 1, matching_kmer.data[1:] + "G") not in dict_interval[seq] and Interval(matching_kmer.begin + 1, matching_kmer.end - 1, matching_kmer.data[1:] + "T") not in dict_interval[seq] and Interval(matching_kmer.begin - 1, matching_kmer.end + 1, "A" + matching_kmer.data[:-1]) not in dict_interval[seq] and Interval(matching_kmer.begin - 1, matching_kmer.end + 1, "C" + matching_kmer.data[:-1]) not in dict_interval[seq] and Interval(matching_kmer.begin - 1, matching_kmer.end + 1, "G" +  matching_kmer.data[:-1]) not in dict_interval[seq] and Interval(matching_kmer.begin - 1, matching_kmer.end + 1, "T" + matching_kmer.data[:-1]) not in dict_interval[seq]:
-				filtered_tree[matching_kmer.begin + 1:matching_kmer.end + 1] = [seq, matching_kmer.data]			
+			if keep_all_kmer is False:
+				if (Interval(matching_kmer.begin + 1, matching_kmer.end - 1, 
+				matching_kmer.data[1:] + "A") not in dict_interval[seq] and
+				Interval(matching_kmer.begin + 1, matching_kmer.end - 1, 
+				matching_kmer.data[1:] + "C") not in dict_interval[seq] and
+				Interval(matching_kmer.begin + 1, matching_kmer.end - 1, 
+				matching_kmer.data[1:] + "G") not in dict_interval[seq] and
+				Interval(matching_kmer.begin + 1, matching_kmer.end - 1, 
+				matching_kmer.data[1:] + "T") not in dict_interval[seq] and
+				Interval(matching_kmer.begin - 1, matching_kmer.end + 1, 
+				"A" + matching_kmer.data[:-1]) not in dict_interval[seq] and
+				Interval(matching_kmer.begin - 1, matching_kmer.end + 1, 
+				"C" + matching_kmer.data[:-1]) not in dict_interval[seq] and
+				Interval(matching_kmer.begin - 1, matching_kmer.end + 1, 
+				"G" +  matching_kmer.data[:-1]) not in dict_interval[seq] and
+				Interval(matching_kmer.begin - 1, matching_kmer.end + 1, 
+				"T" + matching_kmer.data[:-1]) not in dict_interval[seq]):
+					filtered_tree[matching_kmer.begin + 1:matching_kmer.end + 1] = [seq, matching_kmer.data]
+			else:
+				filtered_tree[matching_kmer.begin + 1:matching_kmer.end + 1] = [seq, matching_kmer.data]		
 				if str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1) not in count_dict:
 					count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)] = {}
 					count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)]["total"] = 1
@@ -177,8 +213,7 @@ if __name__ == "__main__":
 	args = get_args(argvals)
 	dict_seq = read_align(args.filename, args.select_sequence, args.reject_sequence)
 	dict_seq_kmer = create_kmer_dict(dict_seq, args.kmer_length)
-	dict_interval = find_match(dict_seq_kmer, args.minimal_distance, args.kmer_length, args.output, args.keep_all_kmer)
-	if args.keep_all_kmer is False:
-		filtered_tree, count_dict = k_filter(dict_interval)
+	dict_interval = find_match(dict_seq_kmer, args.minimal_distance, args.kmer_length, args.output)
+	filtered_tree, count_dict = k_filter(dict_interval, args.filter_kmer)
 	create_file(filtered_tree, count_dict, args.output, args.kmer_length)
 
