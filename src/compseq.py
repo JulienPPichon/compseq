@@ -44,14 +44,17 @@ def get_args(argv = None):
 
 
 def read_align(input_file, select_sequences, reject_sequences):
+	"""Read alignment file and returns a dictionnary of sequences."""
 	dict_seq = {}
 	with open(input_file, "r") as filin:
 		for n, line in enumerate(filin):
 			line = line.strip()
+			# Parse nexus file to keep only sequences.
 			if n < 7 or line.startswith(";") or line.startswith("END") or len(line) == 0:
 				continue
 			else:
 				line = line.split()
+				# Test for optionnal selected or rejected sequences argument.
 				if select_sequences == None and reject_sequences == None:
 					dict_seq[line[0]] = line[1]
 				elif select_sequences != None:
