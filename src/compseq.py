@@ -113,7 +113,7 @@ def create_kmer_dict(dict_seq, k):
 	return dict_seq_kmer
 
 
-def find_match(dict_seq_kmer, min_distance, k, file_output):
+def find_match(dict_seq_kmer, min_distance, k):
 	"""Create a dictionnary of intervaltree containing the kmers and their reversed complementary.
 	
 	Parameters
@@ -122,8 +122,8 @@ def find_match(dict_seq_kmer, min_distance, k, file_output):
 		Dictionnary of dictionnary of list as {individual1:{kmer1:[[start1:end1], [start2:end2]]}}
 	arg2 : int
 		Minimal distance between a kmer and its reverse complementary sequence.
-	arg3 : string
-		Name of the output file.
+	arg3 : int
+		Length of the kmers.
 		
 	Returns
 	-------
@@ -132,43 +132,63 @@ def find_match(dict_seq_kmer, min_distance, k, file_output):
 		{Individual1:([kmer_start:complementary_start = kmer], ...), ...}
 	"""
 	dict_interval = {}
-	with open(file_output, "w") as filout:
-		for seq in dict_seq_kmer:
-			match = IntervalTree()
-			for kmer in dict_seq_kmer[seq]:
-				# Convert the kmer to its reversed complementary sequence.
-				reverse = kmer[::-1]
-				comp_reverse = reverse.replace("T", "z")
-				comp_reverse = comp_reverse.replace("A", "T")
-				comp_reverse = comp_reverse.replace("z", "A")
-				comp_reverse = comp_reverse.replace("G", "z")
-				comp_reverse = comp_reverse.replace("C", "G")
-				comp_reverse = comp_reverse.replace("z", "C")
-				if comp_reverse in dict_seq_kmer[seq]:
-					# If only one position exists for this kmer and its reversed complementary.
-					if (len(dict_seq_kmer[seq][kmer]) == 1 and 
-					len(dict_seq_kmer[seq][comp_reverse]) == 1):
-						if (int(dict_seq_kmer[seq][kmer][0]) + k <= int(dict_seq_kmer[seq]
-						[comp_reverse][0]) and int(dict_seq_kmer[seq][comp_reverse][0]) - 
-						int(dict_seq_kmer[seq][kmer][0]) + k <= min_distance):
-							match[dict_seq_kmer[seq][kmer][0]:dict_seq_kmer[seq][comp_reverse][0]] = kmer
-					# If several positions exist for this kmer and its reversed complementary.
-					else:
-						for position in dict_seq_kmer[seq][kmer]:
-							for position_reverse in dict_seq_kmer[seq][comp_reverse]:
-								if (int(position + k) <= int(position_reverse) and
-								int(position_reverse) - int(position) + k <= min_distance):
-									match[position:position_reverse] = kmer
-			dict_interval[seq] = match
+	for seq in dict_seq_kmer:
+		match = IntervalTree()
+		for kmer in dict_seq_kmer[seq]:
+			# Convert the kmer to its reversed complementary sequence.
+			reverse = kmer[::-1]
+			comp_reverse = reverse.replace("T", "z")
+			comp_reverse = comp_reverse.replace("A", "T")
+			comp_reverse = comp_reverse.replace("z", "A")
+			comp_reverse = comp_reverse.replace("G", "z")
+			comp_reverse = comp_reverse.replace("C", "G")
+			comp_reverse = comp_reverse.replace("z", "C")
+			if comp_reverse in dict_seq_kmer[seq]:
+				# If only one position exists for this kmer and its reversed complementary.
+				if (len(dict_seq_kmer[seq][kmer]) == 1 and 
+				len(dict_seq_kmer[seq][comp_reverse]) == 1):
+					if (int(dict_seq_kmer[seq][kmer][0]) + k <= int(dict_seq_kmer[seq]
+					[comp_reverse][0]) and int(dict_seq_kmer[seq][comp_reverse][0]) - 
+					int(dict_seq_kmer[seq][kmer][0]) + k <= min_distance):
+						match[dict_seq_kmer[seq][kmer][0]:dict_seq_kmer[seq][comp_reverse][0]]\
+						= kmer
+				# If several positions exist for this kmer and its reversed complementary.
+				else:
+					for position in dict_seq_kmer[seq][kmer]:
+						for position_reverse in dict_seq_kmer[seq][comp_reverse]:
+							if (int(position + k) <= int(position_reverse) and
+							int(position_reverse) - int(position) + k <= min_distance):
+								match[position:position_reverse] = kmer
+		dict_interval[seq] = match
 	return dict_interval
 
 
 def k_filter(dict_interval, keep_all_kmer):
+	"""Filter and count how many time each kmer is conserved across all the individuals.
+	
+	Parameters
+	----------
+	arg1 : dict
+		Dictionnary with individuals as key and the intervaltree of its kmers as value.
+	arg2 : bool
+		Filter or not complementary sequences belonging to a greater kmer length.
+		
+	Returns
+	-------
+	intervaltree
+		Intervaltree of all kmers containing the corresponding individual and kmer sequence.
+		(start_kmer1:start_comp1 = [individual1, AGTCTG], ...)
+	dict
+		Dictionnary with position interval as key and dictionnary of kmer sequence as values.
+		{100_500:{AGCGTTAG:4, GTTTAGCA:5, total:9},140_360:{...}...} 
+		
+	"""
 	filtered_tree = IntervalTree()
 	count_dict = {}
 	for seq in tqdm(dict_interval):
 		for matching_kmer in sorted(dict_interval[seq]):
 			if keep_all_kmer is False:
+				# Filter if the neighboured kmer is found in dict.
 				if (Interval(matching_kmer.begin + 1, matching_kmer.end - 1, 
 				matching_kmer.data[1:] + "A") not in dict_interval[seq] and
 				Interval(matching_kmer.begin + 1, matching_kmer.end - 1, 
@@ -185,26 +205,76 @@ def k_filter(dict_interval, keep_all_kmer):
 				"G" +  matching_kmer.data[:-1]) not in dict_interval[seq] and
 				Interval(matching_kmer.begin - 1, matching_kmer.end + 1, 
 				"T" + matching_kmer.data[:-1]) not in dict_interval[seq]):
-					filtered_tree[matching_kmer.begin + 1:matching_kmer.end + 1] = [seq, matching_kmer.data]
+					# Create interval of kmers containing the corresponding individual and sequence.
+					filtered_tree[matching_kmer.begin + 1:matching_kmer.end + 1]\
+					= [seq, matching_kmer.data]
+					# Create a dict of occurence of a reversed complentary sequence at a particular 
+					# position across the individuals. 
+					if str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1) not in count_dict:
+						count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)] = {}
+						# Total number of kmer at a specific position and its reveserd complement.
+						count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)]\
+						["total"] = 1
+						# Total number of a specific kmer sequence at a specific position.
+						count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)]\
+						[matching_kmer.data] = 1
+					else:
+						# Increment if the specific position or kmer is encountered.
+						count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)]\
+						["total"] += 1
+						if matching_kmer.data not in count_dict[str(matching_kmer.begin + 1) + "_"\
+						+ str(matching_kmer.end + 1)]:
+							count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)]\
+							[matching_kmer.data] = 1
+						else:
+							count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)]\
+							[matching_kmer.data] += 1
+			# If kmer not filtered.
 			else:
-				filtered_tree[matching_kmer.begin + 1:matching_kmer.end + 1] = [seq, matching_kmer.data]		
+				filtered_tree[matching_kmer.begin + 1:matching_kmer.end + 1]\
+				= [seq, matching_kmer.data]
+				# Same code than if it was filtered, could be factorized as a function.
 				if str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1) not in count_dict:
 					count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)] = {}
-					count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)]["total"] = 1
-					count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)][matching_kmer.data] = 1
+					count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)]\
+					["total"] = 1
+					count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)]\
+					[matching_kmer.data] = 1
 				else:
-					count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)]["total"] += 1
-					if matching_kmer.data not in count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)]:
-						count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)][matching_kmer.data] = 1
+					count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)]\
+					["total"] += 1
+					if matching_kmer.data not in count_dict[str(matching_kmer.begin + 1) + "_"\
+					+ str(matching_kmer.end + 1)]:
+						count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)]\
+						[matching_kmer.data] = 1
 					else:
-						count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)][matching_kmer.data] += 1
+						count_dict[str(matching_kmer.begin + 1) + "_" + str(matching_kmer.end + 1)]\
+						[matching_kmer.data] += 1
 	return [filtered_tree, count_dict]
 					
 					
 def create_file(filtered_tree, count_dict, file_output, k):
+	"""Create output TSV file.
+	
+	Parameters
+	----------
+	arg1 : intervaltree
+		Intervaltree of all kmers containing the corresponding individual and kmer sequence.
+	arg2 : dict
+		Dictionnary with position interval as key and dictionnary of kmer sequence as values.
+	arg3 : string
+		Name of the output file.
+	arg4 : int
+		Length of the kmers.
+	"""
 	with open(file_output, "w") as filout:
+		filout.write("sequence\tkmer\tstart\tcomp_start\tcount\tcount_kmer\tk\n")
 		for interval_obj in sorted(filtered_tree):
-			filout.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(interval_obj.data[0], interval_obj.data[1], interval_obj.begin, interval_obj.end, count_dict[str(interval_obj.begin) + "_" + str(interval_obj.end)]["total"], count_dict[str(interval_obj.begin) + "_" + str(interval_obj.end)][interval_obj.data[1]], k))
+			filout.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(interval_obj.data[0], 
+			interval_obj.data[1], interval_obj.begin, interval_obj.end, 
+			count_dict[str(interval_obj.begin) + "_" + str(interval_obj.end)]["total"], 
+			count_dict[str(interval_obj.begin) + "_" + str(interval_obj.end)][interval_obj.data[1]],
+			k))
 	
 
 if __name__ == "__main__":
@@ -213,7 +283,7 @@ if __name__ == "__main__":
 	args = get_args(argvals)
 	dict_seq = read_align(args.filename, args.select_sequence, args.reject_sequence)
 	dict_seq_kmer = create_kmer_dict(dict_seq, args.kmer_length)
-	dict_interval = find_match(dict_seq_kmer, args.minimal_distance, args.kmer_length, args.output)
+	dict_interval = find_match(dict_seq_kmer, args.minimal_distance, args.kmer_length)
 	filtered_tree, count_dict = k_filter(dict_interval, args.filter_kmer)
 	create_file(filtered_tree, count_dict, args.output, args.kmer_length)
 
