@@ -1,32 +1,49 @@
+#!/bin/env python3
+# -*- coding: utf-8 -*-
+# This program is free software: you can redistribute it and/or modify it under the terms of the 
+# GNU General Public License as published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version. This program is distributed in the hope that it
+# will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY 
+# or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+# A copy of the GNU General Public License is available at http://www.gnu.org/licenses/gpl-3.0.html
+
+"""Analyse the conservation of reversed complementary motifs in an alignment file."""
+
+__author__ = "Julien Pichon"
+__contact__ = "julien.pichon@cri-paris.org"
+__version__ = "1.0.0"
+__license__ = "GPL"
+
 import argparse
 from intervaltree import Interval, IntervalTree
 from tqdm import tqdm
 
 
 def get_args(argv = None):
+	"""Retrieves the arguments of the program. Returns: An object that contains the arguments."""	
 	parser = argparse.ArgumentParser()
-	parser.add_argument("-i", "--filename", help="Take fasta or alignment file as input")
-	parser.add_argument("-o", "--output", help="Name of the tsv output file with kmer, its start position, and the start position of its reverse complementary sequence", default = "matching_kmer.tsv")
-	parser.add_argument("-d", "--minimal_distance", type=int, help="Length of the minimal distance between a kmer and its reverse complementary sequence", default = 100)
-	parser.add_argument("-k", "--kmer_length", type=int, help="Length of the matching sequences", default = 10)
-	parser.add_argument("-f", "--keep_all_kmer", help="Filter out matching sequences belonging to a greater k length", action="store_false")
-	parser.add_argument('-s', "--select_sequence", nargs='*', help="Comparison only between the specified sequences")
+	parser.add_argument("-i", "--filename", help="Take nexus alignement file as input.")
+	parser.add_argument("-o", "--output", help="Name of the tsv output file containing the\
+	individual's name, the kmer sequence, the start position of the kmer sequence, the start\
+	position of its reverse complementary sequence", "number of individuals possessing this kmer\
+	sequence and its reversed complementary at these positions, number of individuals possessing a\
+	kmer sequence and its reverted complementary at these positions, kmer length."
+	default = "matching_kmer.tsv")
+	parser.add_argument("-d", "--minimal_distance", type=int, help="Minimal distance between a kmer\
+	and its reverse complementary sequence.", default = 100)
+	parser.add_argument("-k", "--kmer_length", type=int, help="Complementary sequences length.",
+	default = 10)
+	parser.add_argument("-f", "--keep_all_kmer", help="Filter out complementary sequences belonging\
+	to a greater kmer length. (e. g: AGGGA TCCCT. AGGG or GGGA will not count because AGGGA have a\
+	reversed complementary sequence).", action="store_false")
+	parser.add_argument('-s', "--select_sequence", nargs='*', help="Only the specified sequences\
+	will count for the conservation.")
+	parser.add_argument('-r', "--reject_sequence", nargs='*', help="The specified sequences will\
+	not count for the conservation.")
 	return parser.parse_args(argv)
 
 
-def read_fasta(input_file):
-	seq = ""
-	with open(input_file, "r") as filin:
-		for line in filin:
-			line = line.strip()
-			if line.startswith(">"):
-				continue
-			else:
-				seq = seq + line
-	return seq
-
-
-def read_align(input_file, select_sequences):
+def read_align(input_file, select_sequences, reject_sequences):
 	dict_seq = {}
 	with open(input_file, "r") as filin:
 		for n, line in enumerate(filin):
@@ -35,10 +52,13 @@ def read_align(input_file, select_sequences):
 				continue
 			else:
 				line = line.split()
-				if select_sequences == None:
+				if select_sequences == None and reject_sequences == None:
 					dict_seq[line[0]] = line[1]
-				else:
+				elif select_sequences != None:
 					if line[0] in select_sequences:
+						dict_seq[line[0]] = line[1]
+				elif reject_sequences != None:
+					if line[0] not in reject_sequences:
 						dict_seq[line[0]] = line[1]
 	return dict_seq
 				
@@ -121,7 +141,7 @@ if __name__ == "__main__":
 
 	argvals = None
 	args = get_args(argvals)
-	dict_seq = read_align(args.filename, args.select_sequence)
+	dict_seq = read_align(args.filename, args.select_sequence, args.reject_sequence)
 	dict_seq_kmer = create_kmer_dict(dict_seq, args.kmer_length)
 	dict_interval = find_match(dict_seq_kmer, args.minimal_distance, args.kmer_length, args.output, args.keep_all_kmer)
 	if args.keep_all_kmer is False:
