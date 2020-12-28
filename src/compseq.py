@@ -44,7 +44,22 @@ def get_args(argv = None):
 
 
 def read_align(input_file, select_sequences, reject_sequences):
-	"""Read alignment file and returns a dictionnary of sequences."""
+	"""Read alignment file and returns a dictionnary of sequences.
+	
+	Parameters
+	----------
+	arg1 : string
+		Name of the input file.
+	arg2 : list
+		List of selected individuals.
+	arg3 : list
+		List of rejected individuals.
+		
+	Returns
+	-------
+	dict
+		Dictionnary with the indivual as key and its sequence as value.
+	"""
 	dict_seq = {}
 	with open(input_file, "r") as filin:
 		for n, line in enumerate(filin):
@@ -54,7 +69,7 @@ def read_align(input_file, select_sequences, reject_sequences):
 				continue
 			else:
 				line = line.split()
-				# Test for optionnal selected or rejected sequences argument.
+				# Test for optionnal selected or rejected sequences arguments.
 				if select_sequences == None and reject_sequences == None:
 					dict_seq[line[0]] = line[1]
 				elif select_sequences != None:
@@ -67,12 +82,28 @@ def read_align(input_file, select_sequences, reject_sequences):
 				
 
 def create_kmer_dict(dict_seq, k):
+	"""Create a dictionnary of kmers with positions as values in the dictionnary of sequences.
+	
+	Parameters
+	----------
+	arg1 : dict
+		Dictionnary with the indivual as key and its sequence as value.
+	arg2 : int
+		Length of the kmers.
+		
+	Returns
+	-------
+	dict
+		Dictionnary of dictionnary of list as {individual1:{kmer1:[[start1:end1], [start2:end2]]}}
+	"""
 	dict_seq_kmer = {}
 	for seq in dict_seq:
 		dict_kmer = {}
 		for position in range(len(dict_seq[seq]) - k):
+			# Don't keep kmers containing gaps.
 			if dict_seq[seq][position:position + k].count("-") != 0:
 				continue
+			# Test if the kmer is already present in the dict.
 			else:
 				if dict_seq[seq][position:position + k] not in dict_kmer:
 					dict_kmer[dict_seq[seq][position:position + k]] = [position]
