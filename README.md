@@ -39,3 +39,8 @@ Only the specified sequences will count for the conservation.
 
 -r [REJECT_SEQUENCE ...], --reject_sequence [REJECT_SEQUENCE ...]
 The specified sequences will not count for the conservation.
+
+
+Example:
+
+    python3 compseq.py -i ../data/example.nex -o test.tsv -d 100 -k 8 -f -r Seq9 Seq10
