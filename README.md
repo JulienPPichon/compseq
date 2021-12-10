@@ -1,4 +1,5 @@
-Analyse the conservation of reversed complementary motifs in an alignment file.
+This script has been developped in the frame of a M2 project.
+It analyses the conservation of reversed complementary motifs in an alignment file.
 
 
 usage: compseq.py [-h] [-i FILENAME] [-o OUTPUT] [-d MINIMAL_DISTANCE]
